@@ -13,6 +13,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -23,13 +25,16 @@ public class ChunkListener {
 
     private record ChunkEntry(ChunkPos pos, NbtCompound nbt) {}
 
+    private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm");
+
     private static final ConcurrentLinkedQueue<ChunkEntry> saveQueue = new ConcurrentLinkedQueue<>();
     private static final Map<Long, RegionFile> openRegionFiles = new HashMap<>();
     private static final AtomicInteger chunkCount = new AtomicInteger(0);
     private static volatile int dataVersion = 4671;
     private static volatile boolean running = false;
     private static Thread saveThread;
-    private static Path regionDir;
+    private static Path worldFolder; // z.B. downloaded_worlds/Export_2024-01-15_14-30
+    private static Path regionDir;   // worldFolder/region
     private static final Object startLock = new Object();
 
     public static void addChunkNbt(ChunkPos chunkPos, NbtCompound chunkNbt) {
@@ -52,7 +57,10 @@ public class ChunkListener {
     }
 
     private static void startSaveThread() {
-        regionDir = Path.of("downloaded_world", "region");
+        // Jeder Export bekommt einen eigenen Ordner — keine Kollisionen zwischen Sessions
+        String exportName = "Export_" + LocalDateTime.now().format(TIMESTAMP);
+        worldFolder = Path.of("downloaded_worlds", exportName);
+        regionDir = worldFolder.resolve("region");
         try {
             Files.createDirectories(regionDir);
         } catch (IOException e) {
@@ -63,7 +71,7 @@ public class ChunkListener {
         saveThread = new Thread(ChunkListener::saveLoop, "WD-ChunkSaver");
         saveThread.setDaemon(true);
         saveThread.start();
-        System.out.println("[WorldDownloader] Save thread started");
+        System.out.println("[WorldDownloader] Save thread started → " + worldFolder);
     }
 
     private static void saveLoop() {
@@ -148,10 +156,16 @@ public class ChunkListener {
         return dataVersion;
     }
 
+    public static Path getWorldFolder() {
+        return worldFolder;
+    }
+
     public static void clear() {
         stop();
         saveQueue.clear();
         chunkCount.set(0);
         dataVersion = 4671;
+        worldFolder = null;
+        regionDir = null;
     }
 }

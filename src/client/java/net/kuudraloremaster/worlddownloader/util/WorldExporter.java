@@ -95,12 +95,14 @@ public class WorldExporter {
 
         NbtCompound overworld = new NbtCompound();
         NbtCompound overworldGen = new NbtCompound();
-        overworldGen.putString("type", "minecraft:noise");
-        overworldGen.putString("settings", "minecraft:overworld");
-        NbtCompound overworldBiomeSource = new NbtCompound();
-        overworldBiomeSource.putString("preset", "minecraft:overworld");
-        overworldBiomeSource.putString("type", "minecraft:multi_noise");
-        overworldGen.put("biome_source", overworldBiomeSource);
+        overworldGen.putString("type", "minecraft:flat");
+        // Empty layers + void biome = no terrain generation outside saved chunks
+        NbtCompound flatSettings = new NbtCompound();
+        flatSettings.put("layers", new NbtList());
+        flatSettings.putString("biome", "minecraft:the_void");
+        flatSettings.putBoolean("features", false);
+        flatSettings.putBoolean("lakes", false);
+        overworldGen.put("settings", flatSettings);
         overworld.put("generator", overworldGen);
         overworld.putString("type", "minecraft:overworld");
         dimensions.put("minecraft:overworld", overworld);

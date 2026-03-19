@@ -15,7 +15,6 @@ import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 @Environment(EnvType.CLIENT)
@@ -59,14 +58,17 @@ public class WorldDownloaderClient implements ClientModInitializer {
                 System.out.println(" Found " + entityCount + " entities and " + containerCount + " containers");
 
                 try {
-                    Path worldFolder = Path.of("downloaded_world");
-                    Files.createDirectories(worldFolder);
+                    Path worldFolder = ChunkListener.getWorldFolder();
+                    if (worldFolder == null) {
+                        System.out.println(" Export folder nicht gefunden — wurden Chunks aufgezeichnet?");
+                        return;
+                    }
 
                     WorldExporter.createLoadableWorld(worldFolder.toFile());
                     Exporter.exportChunks(worldFolder.toFile());
                     Exporter.exportEntities(worldFolder.toFile());
 
-                    System.out.println(" World exported! Copy 'downloaded_world/' to '.minecraft/saves/'");
+                    System.out.println(" World exported! Copy '" + worldFolder + "/' to '.minecraft/saves/'");
                     System.out.println(" Export Summary:");
                     System.out.println("    - Chunks: " + chunkCount);
                     System.out.println("    - Entities: " + entityCount);
