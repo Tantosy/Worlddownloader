@@ -3,10 +3,12 @@ package net.kuudraloremaster.worlddownloader.util;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.world.ClientWorld;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.*;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.Uuids;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 
 import java.io.*;
@@ -62,12 +64,12 @@ public class WorldExporter {
         levelDat.putByte("initialized", (byte) 1);
         levelDat.putInt("version", 19133);
 
-        // Spawn (1.21.11 format)
+        // Spawn (1.21.11 format) — find valid position: feet+head=air, block below=solid
         int spawnX = 0, spawnY = 64, spawnZ = 0;
-        if (client.player != null) {
+        if (client.player != null && client.world != null) {
             spawnX = MathHelper.floor(client.player.getX());
-            spawnY = MathHelper.floor(client.player.getY());
             spawnZ = MathHelper.floor(client.player.getZ());
+            spawnY = findSafeSpawnY(client.world, spawnX, spawnZ);
         }
         NbtCompound spawn = new NbtCompound();
         spawn.putIntArray("pos", new int[]{spawnX, spawnY, spawnZ});
@@ -228,15 +230,20 @@ public class WorldExporter {
         player.putFloat("XpP", client.player.experienceProgress);
         player.putInt("XpLevel", client.player.experienceLevel);
         player.putInt("XpTotal", client.player.totalExperience);
-        player.putShort("Fire", (short) client.player.getFireTicks());
+        player.putShort("Fire", (short) 0);
         player.putShort("Air", (short) client.player.getAir());
-        player.putBoolean("OnGround", client.player.isOnGround());
+        player.putBoolean("OnGround", true);
+        player.putFloat("FallDistance", 0.0f);
+        player.putInt("HurtResistantTime", 60); // 3 seconds of damage immunity after spawn
         player.putBoolean("Invulnerable", client.player.isInvulnerable());
         player.putIntArray("UUID", Uuids.toIntArray(client.player.getUuid()));
 
+        // Find a valid spawn position: feet=air, head=air, ground below=solid
+        int safeY = findSafeSpawnY(client.world, MathHelper.floor(client.player.getX()),
+                MathHelper.floor(client.player.getZ()));
         NbtList pos = new NbtList();
         pos.add(NbtDouble.of(client.player.getX()));
-        pos.add(NbtDouble.of(client.player.getY()));
+        pos.add(NbtDouble.of(safeY));
         pos.add(NbtDouble.of(client.player.getZ()));
         player.put("Pos", pos);
 
@@ -294,5 +301,30 @@ public class WorldExporter {
                 new File(new File(worldFolder, "stats"), uuid + ".json").toPath(),
                 "{\"stats\":{},\"DataVersion\":" + dataVersion + "}"
         );
+    }
+
+    /**
+     * Scans from Y=320 downward to find a valid spawn position where:
+     * - block at Y   is air (feet)
+     * - block at Y+1 is air (head)
+     * - block at Y-1 is solid (ground to stand on)
+     */
+    private static int findSafeSpawnY(ClientWorld world, int x, int z) {
+        if (world == null) return 64;
+        int maxY = 318; // 320 - 2 (Overworld max, Platz für feet+head check)
+        for (int y = maxY; y > world.getBottomY() + 1; y--) {
+            BlockPos feet   = new BlockPos(x, y,     z);
+            BlockPos head   = new BlockPos(x, y + 1, z);
+            BlockPos ground = new BlockPos(x, y - 1, z);
+
+            boolean feetClear   = world.getBlockState(feet).getCollisionShape(world, feet).isEmpty();
+            boolean headClear   = world.getBlockState(head).getCollisionShape(world, head).isEmpty();
+            boolean groundSolid = !world.getBlockState(ground).getCollisionShape(world, ground).isEmpty();
+
+            if (feetClear && headClear && groundSolid) {
+                return y;
+            }
+        }
+        return 64;
     }
 }

@@ -44,7 +44,7 @@ public class WorldDownloaderClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (exportKey.wasPressed()) {
-                int chunkCount = ChunkListener.getAll().size();
+                int chunkCount = ChunkListener.getChunkCount();
                 int entityCount = EntityTracker.getTotalTrackedEntities();
                 int containerCount = ContainerTracker.getTotalSavedContainers();
 
@@ -78,7 +78,7 @@ public class WorldDownloaderClient implements ClientModInitializer {
             }
 
             while (clearKey.wasPressed()) {
-                int chunkCount = ChunkListener.getAll().size();
+                int chunkCount = ChunkListener.getChunkCount();
                 int entityCount = EntityTracker.getTotalTrackedEntities();
                 int containerCount = ContainerTracker.getTotalSavedContainers();
                 ChunkListener.clear();
