@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "net.kuudraloremaster.worlddownloader.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ChunkDataMixin",
+    "ChunkDataPacketAccessor",
+    "ContainerMixin",
+    "DebugContainerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

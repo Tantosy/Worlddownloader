@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "worlddownloader",
+	"version": "1.0.1",
+	"name": "World Downloader",
+	"description": "This is a simple mod that allows you to download worlds",
+	"authors": [
+		"Kuudraloremaster"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"environment": "*",
+	"entrypoints": {
+		"client": [
+			"net.kuudraloremaster.worlddownloader.WorldDownloaderClient"
+		]
+	},
+	"mixins": [
+		"worlddownloader.mixins.json",
+		{
+			"config": "worlddownloader.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

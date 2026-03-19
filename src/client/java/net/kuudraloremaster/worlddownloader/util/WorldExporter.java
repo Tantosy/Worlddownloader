@@ -1,0 +1,298 @@
+package net.kuudraloremaster.worlddownloader.util;
+
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.*;
+import net.minecraft.registry.Registries;
+import net.minecraft.util.Uuids;
+import net.minecraft.util.math.MathHelper;
+
+import java.io.*;
+import java.nio.file.Files;
+
+@Environment(EnvType.CLIENT)
+public class WorldExporter {
+
+    public static void createLoadableWorld(File worldFolder) {
+        try {
+            MinecraftClient client = MinecraftClient.getInstance();
+
+            new File(worldFolder, "region").mkdirs();
+            new File(worldFolder, "entities").mkdirs();
+            new File(worldFolder, "playerdata").mkdirs();
+            new File(worldFolder, "stats").mkdirs();
+            new File(worldFolder, "advancements").mkdirs();
+            new File(worldFolder, "data").mkdirs();
+            new File(worldFolder, "poi").mkdirs();
+
+            // session.lock
+            try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(new File(worldFolder, "session.lock")))) {
+                dos.writeLong(System.currentTimeMillis());
+            }
+
+            writeLevelDat(worldFolder, client);
+            writePlayerData(worldFolder, client);
+            writeEmptyAdvancements(worldFolder, client);
+            writeEmptyStats(worldFolder, client);
+
+            System.out.println(" World structure created at: " + worldFolder.getAbsolutePath());
+        } catch (Exception e) {
+            System.out.println(" Failed to create world structure: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private static void writeLevelDat(File worldFolder, MinecraftClient client) throws IOException {
+        int dataVersion = ChunkListener.getDataVersion();
+        String versionName = "1.21.11";
+
+        NbtCompound levelDat = new NbtCompound();
+        levelDat.putInt("DataVersion", dataVersion);
+        levelDat.putString("LevelName", "Downloaded World");
+        levelDat.putLong("LastPlayed", System.currentTimeMillis());
+        levelDat.putLong("Time", client.world != null ? client.world.getTime() : 0L);
+        levelDat.putLong("DayTime", client.world != null ? client.world.getTimeOfDay() : 6000L);
+        levelDat.putInt("GameType", 0);
+        levelDat.putBoolean("hardcore", false);
+        levelDat.putBoolean("allowCommands", false);
+        levelDat.putByte("Difficulty", (byte) 2);
+        levelDat.putBoolean("DifficultyLocked", false);
+        levelDat.putByte("initialized", (byte) 1);
+        levelDat.putInt("version", 19133);
+
+        // Spawn (1.21.11 format)
+        int spawnX = 0, spawnY = 64, spawnZ = 0;
+        if (client.player != null) {
+            spawnX = MathHelper.floor(client.player.getX());
+            spawnY = MathHelper.floor(client.player.getY());
+            spawnZ = MathHelper.floor(client.player.getZ());
+        }
+        NbtCompound spawn = new NbtCompound();
+        spawn.putIntArray("pos", new int[]{spawnX, spawnY, spawnZ});
+        spawn.putFloat("pitch", 0f);
+        spawn.putFloat("yaw", client.player != null ? client.player.getYaw() : 0f);
+        spawn.putString("dimension", "minecraft:overworld");
+        levelDat.put("spawn", spawn);
+
+        // Version
+        NbtCompound version = new NbtCompound();
+        version.putInt("Id", dataVersion);
+        version.putString("Name", versionName);
+        version.putString("Series", "main");
+        version.putBoolean("Snapshot", false);
+        levelDat.put("Version", version);
+
+        // WorldGenSettings
+        NbtCompound worldGenSettings = new NbtCompound();
+        worldGenSettings.putLong("seed", 0L);
+        worldGenSettings.putBoolean("generate_features", true);
+        worldGenSettings.putBoolean("bonus_chest", false);
+        NbtCompound dimensions = new NbtCompound();
+
+        NbtCompound overworld = new NbtCompound();
+        NbtCompound overworldGen = new NbtCompound();
+        overworldGen.putString("type", "minecraft:noise");
+        overworldGen.putString("settings", "minecraft:overworld");
+        NbtCompound overworldBiomeSource = new NbtCompound();
+        overworldBiomeSource.putString("preset", "minecraft:overworld");
+        overworldBiomeSource.putString("type", "minecraft:multi_noise");
+        overworldGen.put("biome_source", overworldBiomeSource);
+        overworld.put("generator", overworldGen);
+        overworld.putString("type", "minecraft:overworld");
+        dimensions.put("minecraft:overworld", overworld);
+
+        NbtCompound nether = new NbtCompound();
+        NbtCompound netherGen = new NbtCompound();
+        netherGen.putString("type", "minecraft:noise");
+        netherGen.putString("settings", "minecraft:nether");
+        NbtCompound netherBiomeSource = new NbtCompound();
+        netherBiomeSource.putString("preset", "minecraft:nether");
+        netherBiomeSource.putString("type", "minecraft:multi_noise");
+        netherGen.put("biome_source", netherBiomeSource);
+        nether.put("generator", netherGen);
+        nether.putString("type", "minecraft:the_nether");
+        dimensions.put("minecraft:the_nether", nether);
+
+        NbtCompound end = new NbtCompound();
+        NbtCompound endGen = new NbtCompound();
+        endGen.putString("type", "minecraft:noise");
+        endGen.putString("settings", "minecraft:end");
+        NbtCompound endBiomeSource = new NbtCompound();
+        endBiomeSource.putString("type", "minecraft:the_end");
+        endGen.put("biome_source", endBiomeSource);
+        end.put("generator", endGen);
+        end.putString("type", "minecraft:the_end");
+        dimensions.put("minecraft:the_end", end);
+
+        worldGenSettings.put("dimensions", dimensions);
+        levelDat.put("WorldGenSettings", worldGenSettings);
+
+        // Game rules (1.21.11 format: byte values with minecraft: prefix)
+        NbtCompound gameRules = new NbtCompound();
+        gameRules.putByte("minecraft:block_drops", (byte) 1);
+        gameRules.putByte("minecraft:advance_time", (byte) 1);
+        gameRules.putByte("minecraft:advance_weather", (byte) 1);
+        gameRules.putByte("minecraft:command_blocks_work", (byte) 1);
+        gameRules.putByte("minecraft:command_block_output", (byte) 1);
+        gameRules.putByte("minecraft:drowning_damage", (byte) 1);
+        gameRules.putByte("minecraft:entity_drops", (byte) 1);
+        gameRules.putByte("minecraft:fall_damage", (byte) 1);
+        gameRules.putByte("minecraft:fire_damage", (byte) 1);
+        gameRules.putInt("minecraft:fire_spread_radius_around_player", 128);
+        gameRules.putByte("minecraft:forgive_dead_players", (byte) 1);
+        gameRules.putByte("minecraft:freeze_damage", (byte) 1);
+        gameRules.putByte("minecraft:global_sound_events", (byte) 1);
+        gameRules.putByte("minecraft:immediate_respawn", (byte) 0);
+        gameRules.putByte("minecraft:keep_inventory", (byte) 0);
+        gameRules.putByte("minecraft:lava_source_conversion", (byte) 0);
+        gameRules.putByte("minecraft:limited_crafting", (byte) 0);
+        gameRules.putByte("minecraft:locator_bar", (byte) 1);
+        gameRules.putByte("minecraft:log_admin_commands", (byte) 1);
+        gameRules.putInt("minecraft:max_block_modifications", 32768);
+        gameRules.putInt("minecraft:max_command_forks", 65536);
+        gameRules.putInt("minecraft:max_command_sequence_length", 65536);
+        gameRules.putInt("minecraft:max_entity_cramming", 24);
+        gameRules.putInt("minecraft:max_snow_accumulation_height", 1);
+        gameRules.putByte("minecraft:mob_drops", (byte) 1);
+        gameRules.putByte("minecraft:mob_explosion_drop_decay", (byte) 1);
+        gameRules.putByte("minecraft:block_explosion_drop_decay", (byte) 1);
+        gameRules.putByte("minecraft:tnt_explosion_drop_decay", (byte) 0);
+        gameRules.putByte("minecraft:mob_griefing", (byte) 1);
+        gameRules.putByte("minecraft:natural_health_regeneration", (byte) 1);
+        gameRules.putByte("minecraft:player_movement_check", (byte) 1);
+        gameRules.putByte("minecraft:elytra_movement_check", (byte) 1);
+        gameRules.putInt("minecraft:players_nether_portal_creative_delay", 0);
+        gameRules.putInt("minecraft:players_nether_portal_default_delay", 80);
+        gameRules.putInt("minecraft:players_sleeping_percentage", 100);
+        gameRules.putByte("minecraft:projectiles_can_break_blocks", (byte) 1);
+        gameRules.putByte("minecraft:pvp", (byte) 1);
+        gameRules.putByte("minecraft:raids", (byte) 1);
+        gameRules.putInt("minecraft:random_tick_speed", 3);
+        gameRules.putByte("minecraft:reduced_debug_info", (byte) 0);
+        gameRules.putInt("minecraft:respawn_radius", 10);
+        gameRules.putByte("minecraft:send_command_feedback", (byte) 1);
+        gameRules.putByte("minecraft:show_advancement_messages", (byte) 1);
+        gameRules.putByte("minecraft:show_death_messages", (byte) 1);
+        gameRules.putByte("minecraft:spawn_mobs", (byte) 1);
+        gameRules.putByte("minecraft:spawn_monsters", (byte) 1);
+        gameRules.putByte("minecraft:spawn_patrols", (byte) 1);
+        gameRules.putByte("minecraft:spawn_phantoms", (byte) 1);
+        gameRules.putByte("minecraft:spawn_wandering_traders", (byte) 1);
+        gameRules.putByte("minecraft:spawn_wardens", (byte) 1);
+        gameRules.putByte("minecraft:spawner_blocks_work", (byte) 1);
+        gameRules.putByte("minecraft:spectators_generate_chunks", (byte) 1);
+        gameRules.putByte("minecraft:spread_vines", (byte) 1);
+        gameRules.putByte("minecraft:tnt_explodes", (byte) 1);
+        gameRules.putByte("minecraft:universal_anger", (byte) 0);
+        gameRules.putByte("minecraft:water_source_conversion", (byte) 1);
+        gameRules.putByte("minecraft:allow_entering_nether_using_portals", (byte) 1);
+        gameRules.putByte("minecraft:ender_pearls_vanish_on_death", (byte) 1);
+        levelDat.put("game_rules", gameRules);
+
+        // DataPacks
+        NbtCompound dataPacks = new NbtCompound();
+        NbtList enabled = new NbtList();
+        enabled.add(NbtString.of("vanilla"));
+        dataPacks.put("Enabled", enabled);
+        dataPacks.put("Disabled", new NbtList());
+        levelDat.put("DataPacks", dataPacks);
+
+        // Weather & misc
+        levelDat.putByte("raining", (byte) 0);
+        levelDat.putByte("thundering", (byte) 0);
+        levelDat.putInt("rainTime", 0);
+        levelDat.putInt("thunderTime", 0);
+        levelDat.putInt("clearWeatherTime", 0);
+
+        NbtCompound dataWrapper = new NbtCompound();
+        dataWrapper.put("Data", levelDat);
+
+        NbtIo.writeCompressed(dataWrapper, worldFolder.toPath().resolve("level.dat"));
+        System.out.println(" level.dat written (DataVersion=" + dataVersion + ", MC=" + versionName + ")");
+    }
+
+    private static void writePlayerData(File worldFolder, MinecraftClient client) throws IOException {
+        if (client.player == null || client.world == null) return;
+
+        int dataVersion = ChunkListener.getDataVersion();
+        String uuid = client.player.getUuid().toString();
+
+        NbtCompound player = new NbtCompound();
+        player.putInt("DataVersion", dataVersion);
+        player.putInt("playerGameType", 0);
+        player.putFloat("Health", client.player.getHealth());
+        player.putInt("foodLevel", client.player.getHungerManager().getFoodLevel());
+        player.putFloat("foodSaturationLevel", client.player.getHungerManager().getSaturationLevel());
+        player.putFloat("XpP", client.player.experienceProgress);
+        player.putInt("XpLevel", client.player.experienceLevel);
+        player.putInt("XpTotal", client.player.totalExperience);
+        player.putShort("Fire", (short) client.player.getFireTicks());
+        player.putShort("Air", (short) client.player.getAir());
+        player.putBoolean("OnGround", client.player.isOnGround());
+        player.putBoolean("Invulnerable", client.player.isInvulnerable());
+        player.putIntArray("UUID", Uuids.toIntArray(client.player.getUuid()));
+
+        NbtList pos = new NbtList();
+        pos.add(NbtDouble.of(client.player.getX()));
+        pos.add(NbtDouble.of(client.player.getY()));
+        pos.add(NbtDouble.of(client.player.getZ()));
+        player.put("Pos", pos);
+
+        NbtList motion = new NbtList();
+        motion.add(NbtDouble.of(0));
+        motion.add(NbtDouble.of(0));
+        motion.add(NbtDouble.of(0));
+        player.put("Motion", motion);
+
+        NbtList rotation = new NbtList();
+        rotation.add(NbtFloat.of(client.player.getYaw()));
+        rotation.add(NbtFloat.of(client.player.getPitch()));
+        player.put("Rotation", rotation);
+
+        NbtList inventory = new NbtList();
+        for (int i = 0; i < client.player.getInventory().size(); i++) {
+            ItemStack stack = client.player.getInventory().getStack(i);
+            if (!stack.isEmpty()) {
+                NbtCompound itemNbt = new NbtCompound();
+                itemNbt.putByte("Slot", (byte) i);
+                itemNbt.putString("id", Registries.ITEM.getId(stack.getItem()).toString());
+                itemNbt.putInt("count", stack.getCount());
+                inventory.add(itemNbt);
+            }
+        }
+        player.put("Inventory", inventory);
+        player.put("EnderItems", new NbtList());
+        player.putString("Dimension", "minecraft:overworld");
+
+        NbtCompound abilities = new NbtCompound();
+        abilities.putFloat("walkSpeed", 0.1f);
+        abilities.putFloat("flySpeed", 0.05f);
+        abilities.putBoolean("mayfly", false);
+        abilities.putBoolean("flying", false);
+        abilities.putBoolean("invulnerable", false);
+        abilities.putBoolean("mayBuild", true);
+        abilities.putBoolean("instabuild", false);
+        player.put("abilities", abilities);
+
+        NbtIo.writeCompressed(player, new File(new File(worldFolder, "playerdata"), uuid + ".dat").toPath());
+        System.out.println(" playerdata written for " + uuid);
+    }
+
+    private static void writeEmptyAdvancements(File worldFolder, MinecraftClient client) throws IOException {
+        if (client.player == null) return;
+        String uuid = client.player.getUuid().toString();
+        Files.writeString(new File(new File(worldFolder, "advancements"), uuid + ".json").toPath(), "{}");
+    }
+
+    private static void writeEmptyStats(File worldFolder, MinecraftClient client) throws IOException {
+        if (client.player == null) return;
+        int dataVersion = ChunkListener.getDataVersion();
+        String uuid = client.player.getUuid().toString();
+        Files.writeString(
+                new File(new File(worldFolder, "stats"), uuid + ".json").toPath(),
+                "{\"stats\":{},\"DataVersion\":" + dataVersion + "}"
+        );
+    }
+}
