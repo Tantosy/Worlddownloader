@@ -56,7 +56,7 @@ public class WorldExporter {
         levelDat.putLong("LastPlayed", System.currentTimeMillis());
         levelDat.putLong("Time", client.world != null ? client.world.getTime() : 0L);
         levelDat.putLong("DayTime", client.world != null ? client.world.getTimeOfDay() : 6000L);
-        levelDat.putInt("GameType", 0);
+        levelDat.putInt("GameType", 1); // Creative
         levelDat.putBoolean("hardcore", false);
         levelDat.putBoolean("allowCommands", false);
         levelDat.putByte("Difficulty", (byte) 2);
@@ -223,7 +223,7 @@ public class WorldExporter {
 
         NbtCompound player = new NbtCompound();
         player.putInt("DataVersion", dataVersion);
-        player.putInt("playerGameType", 0);
+        player.putInt("playerGameType", 1); // Creative
         player.putFloat("Health", client.player.getHealth());
         player.putInt("foodLevel", client.player.getHungerManager().getFoodLevel());
         player.putFloat("foodSaturationLevel", client.player.getHungerManager().getSaturationLevel());
