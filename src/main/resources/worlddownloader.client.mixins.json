@@ -3,7 +3,8 @@
   "package": "net.kuudraloremaster.worlddownloader.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "ChunkDataMixin",
+    "ClientChunkManagerMixin",
+    "BlockInteractionMixin",
     "ChunkDataPacketAccessor",
     "ContainerMixin",
     "DebugContainerMixin"

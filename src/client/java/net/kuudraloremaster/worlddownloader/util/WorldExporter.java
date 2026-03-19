@@ -9,6 +9,7 @@ import net.minecraft.nbt.*;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.Uuids;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.MathHelper;
 
 import java.io.*;
@@ -61,7 +62,7 @@ public class WorldExporter {
         levelDat.putBoolean("allowCommands", false);
         levelDat.putByte("Difficulty", (byte) 2);
         levelDat.putBoolean("DifficultyLocked", false);
-        levelDat.putByte("initialized", (byte) 1);
+        levelDat.putBoolean("initialized", true);
         levelDat.putInt("version", 19133);
 
         // Spawn (1.21.11 format) — find valid position: feet+head=air, block below=solid
@@ -85,8 +86,9 @@ public class WorldExporter {
         version.putString("Series", "main");
         version.putBoolean("Snapshot", false);
         levelDat.put("Version", version);
+        levelDat.putBoolean("WasModded", true);
 
-        // WorldGenSettings
+        // WorldGenSettings — 1:1 Vanilla-Format aus echter 1.21.11 Welt
         NbtCompound worldGenSettings = new NbtCompound();
         worldGenSettings.putLong("seed", 0L);
         worldGenSettings.putBoolean("generate_features", true);
@@ -95,14 +97,12 @@ public class WorldExporter {
 
         NbtCompound overworld = new NbtCompound();
         NbtCompound overworldGen = new NbtCompound();
-        overworldGen.putString("type", "minecraft:flat");
-        // Empty layers + void biome = no terrain generation outside saved chunks
-        NbtCompound flatSettings = new NbtCompound();
-        flatSettings.put("layers", new NbtList());
-        flatSettings.putString("biome", "minecraft:the_void");
-        flatSettings.putBoolean("features", false);
-        flatSettings.putBoolean("lakes", false);
-        overworldGen.put("settings", flatSettings);
+        overworldGen.putString("type", "minecraft:noise");
+        overworldGen.putString("settings", "minecraft:overworld");
+        NbtCompound overworldBiomeSource = new NbtCompound();
+        overworldBiomeSource.putString("type", "minecraft:multi_noise");
+        overworldBiomeSource.putString("preset", "minecraft:overworld");
+        overworldGen.put("biome_source", overworldBiomeSource);
         overworld.put("generator", overworldGen);
         overworld.putString("type", "minecraft:overworld");
         dimensions.put("minecraft:overworld", overworld);
@@ -112,8 +112,8 @@ public class WorldExporter {
         netherGen.putString("type", "minecraft:noise");
         netherGen.putString("settings", "minecraft:nether");
         NbtCompound netherBiomeSource = new NbtCompound();
-        netherBiomeSource.putString("preset", "minecraft:nether");
         netherBiomeSource.putString("type", "minecraft:multi_noise");
+        netherBiomeSource.putString("preset", "minecraft:nether");
         netherGen.put("biome_source", netherBiomeSource);
         nether.put("generator", netherGen);
         nether.putString("type", "minecraft:the_nether");
@@ -306,27 +306,114 @@ public class WorldExporter {
     }
 
     /**
-     * Scans from Y=320 downward to find a valid spawn position where:
-     * - block at Y   is air (feet)
-     * - block at Y+1 is air (head)
-     * - block at Y-1 is solid (ground to stand on)
+     * Findet einen sicheren Spawn-Y-Wert für den Spieler.
+     * Priorität: WORLD_SURFACE Heightmap → Section-Scan → ClientWorld-Scan → Fallback 64
      */
     private static int findSafeSpawnY(ClientWorld world, int x, int z) {
-        if (world == null) return 64;
-        int maxY = 318; // 320 - 2 (Overworld max, Platz für feet+head check)
-        for (int y = maxY; y > world.getBottomY() + 1; y--) {
-            BlockPos feet   = new BlockPos(x, y,     z);
-            BlockPos head   = new BlockPos(x, y + 1, z);
-            BlockPos ground = new BlockPos(x, y - 1, z);
+        ChunkPos chunkPos = new ChunkPos(x >> 4, z >> 4);
+        NbtCompound chunkNbt = ChunkListener.getCachedChunkNbt(chunkPos);
 
-            boolean feetClear   = world.getBlockState(feet).getCollisionShape(world, feet).isEmpty();
-            boolean headClear   = world.getBlockState(head).getCollisionShape(world, head).isEmpty();
-            boolean groundSolid = !world.getBlockState(ground).getCollisionShape(world, ground).isEmpty();
+        if (chunkNbt != null) {
+            int localX = Math.floorMod(x, 16);
+            int localZ = Math.floorMod(z, 16);
 
-            if (feetClear && headClear && groundSolid) {
-                return y;
+            // Versuch 1: WORLD_SURFACE Heightmap aus dem Chunk-NBT
+            int heightY = readWorldSurface(chunkNbt, localX, localZ);
+            if (heightY != Integer.MIN_VALUE) {
+                System.out.println("[WD] SpawnY aus Heightmap: " + heightY);
+                return heightY;
+            }
+
+            // Versuch 2: Höchste Section mit nicht-Luft Blöcken
+            int sectionY = highestNonAirSectionTop(chunkNbt);
+            if (sectionY != Integer.MIN_VALUE) {
+                System.out.println("[WD] SpawnY aus Section-Scan: " + sectionY);
+                return sectionY;
             }
         }
+
+        // Versuch 3: ClientWorld-Scan (Fallback, falls Chunk nicht gecacht)
+        if (world != null) {
+            for (int y = 318; y > world.getBottomY() + 1; y--) {
+                BlockPos feet   = new BlockPos(x, y,     z);
+                BlockPos head   = new BlockPos(x, y + 1, z);
+                BlockPos ground = new BlockPos(x, y - 1, z);
+
+                boolean feetClear   = world.getBlockState(feet).getCollisionShape(world, feet).isEmpty();
+                boolean headClear   = world.getBlockState(head).getCollisionShape(world, head).isEmpty();
+                boolean groundSolid = !world.getBlockState(ground).getCollisionShape(world, ground).isEmpty();
+
+                if (feetClear && headClear && groundSolid) {
+                    return y;
+                }
+            }
+        }
+
+        System.out.println("[WD] SpawnY Fallback: 64");
         return 64;
+    }
+
+    /**
+     * Liest den WORLD_SURFACE Heightmap-Wert aus dem Chunk-NBT.
+     * Gibt spawn-Y zurück (= Y wo der Spieler steht), oder Integer.MIN_VALUE falls nicht verfügbar.
+     * Overworld-spezifisch: bottomY = -64, 9 Bits pro Eintrag.
+     */
+    private static int readWorldSurface(NbtCompound chunkNbt, int localX, int localZ) {
+        if (!chunkNbt.contains("Heightmaps")) return Integer.MIN_VALUE;
+        var hmOpt = chunkNbt.getCompound("Heightmaps");
+        if (hmOpt.isEmpty()) return Integer.MIN_VALUE;
+        NbtCompound hm = hmOpt.get();
+
+        if (!hm.contains("WORLD_SURFACE")) return Integer.MIN_VALUE;
+        var dataOpt = hm.getLongArray("WORLD_SURFACE");
+        if (dataOpt.isEmpty()) return Integer.MIN_VALUE;
+        long[] data = dataOpt.get();
+        if (data.length == 0) return Integer.MIN_VALUE;
+
+        // 9 Bits pro Eintrag, 7 Einträge pro long (non-compact)
+        int index = localZ * 16 + localX;
+        int perLong = 7;
+        int longIndex = index / perLong;
+        int bitOffset = (index % perLong) * 9;
+        if (longIndex >= data.length) return Integer.MIN_VALUE;
+
+        int packed = (int) ((data[longIndex] >> bitOffset) & 0x1FF);
+        if (packed == 0) return Integer.MIN_VALUE; // kein Oberflächen-Block gefunden
+
+        // packed = (Y_oberflächenblock + 1) - bottomY = Y + 65
+        // spawnY (= Y wo Spieler steht) = packed + bottomY = packed - 64
+        return packed - 64;
+    }
+
+    /**
+     * Sucht die höchste Section mit nicht-Luft Blöcken im Chunk-NBT.
+     * Gibt (sectionY + 1) * 16 zurück (konservative obere Grenze), oder Integer.MIN_VALUE.
+     */
+    private static int highestNonAirSectionTop(NbtCompound chunkNbt) {
+        if (!(chunkNbt.get("sections") instanceof NbtList sections)) return Integer.MIN_VALUE;
+
+        int highest = Integer.MIN_VALUE;
+        for (int i = 0; i < sections.size(); i++) {
+            if (!(sections.get(i) instanceof NbtCompound section)) continue;
+
+            if (!(section.get("block_states") instanceof NbtCompound blockStates)) continue;
+            if (!(blockStates.get("palette") instanceof NbtList palette)) continue;
+
+            boolean hasNonAir = false;
+            for (int j = 0; j < palette.size(); j++) {
+                if (!(palette.get(j) instanceof NbtCompound entry)) continue;
+                String name = entry.getString("Name").orElse("minecraft:air");
+                if (!name.equals("minecraft:air")) {
+                    hasNonAir = true;
+                    break;
+                }
+            }
+            if (!hasNonAir) continue;
+
+            int sectionY = section.getByte("Y").orElse((byte) 0);
+            int topY = (sectionY + 1) * 16;
+            if (topY > highest) highest = topY;
+        }
+        return highest;
     }
 }

@@ -5,37 +5,29 @@ import net.fabricmc.api.Environment;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.storage.RegionFile;
-import net.minecraft.world.storage.StorageKey;
 
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.DeflaterOutputStream;
 
 @Environment(EnvType.CLIENT)
 public class ChunkListener {
 
-    private record ChunkEntry(ChunkPos pos, NbtCompound nbt) {}
-
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm");
 
-    private static final ConcurrentLinkedQueue<ChunkEntry> saveQueue = new ConcurrentLinkedQueue<>();
-    private static final Map<Long, RegionFile> openRegionFiles = new HashMap<>();
+    // In-memory store — alle Chunks bis zum Export im RAM halten
+    private static final ConcurrentHashMap<ChunkPos, NbtCompound> chunkNbtCache = new ConcurrentHashMap<>();
     private static final AtomicInteger chunkCount = new AtomicInteger(0);
     private static volatile int dataVersion = 4671;
-    private static volatile boolean running = false;
-    private static Thread saveThread;
-    private static Path worldFolder; // z.B. downloaded_worlds/Export_2024-01-15_14-30
-    private static Path regionDir;   // worldFolder/region
-    private static final Object startLock = new Object();
+    private static volatile Path worldFolder;
+    private static volatile Path regionDir;
+    private static final Object initLock = new Object();
 
     public static void addChunkNbt(ChunkPos chunkPos, NbtCompound chunkNbt) {
         var v = chunkNbt.getInt("DataVersion");
@@ -43,109 +35,126 @@ public class ChunkListener {
             dataVersion = v.get();
         }
 
-        saveQueue.add(new ChunkEntry(chunkPos, chunkNbt));
-        chunkCount.incrementAndGet();
-        System.out.println("[WorldDownloader] Queued chunk: " + chunkPos.x + "," + chunkPos.z);
+        boolean isNew = chunkNbtCache.put(chunkPos, chunkNbt) == null;
+        if (isNew) {
+            chunkCount.incrementAndGet();
+        }
+        System.out.println("[WorldDownloader] Cached chunk: " + chunkPos.x + "," + chunkPos.z
+                + " (total: " + chunkCount.get() + ")");
 
-        if (!running) {
-            synchronized (startLock) {
-                if (!running) {
-                    startSaveThread();
+        // Export-Ordner beim ersten Chunk anlegen
+        if (worldFolder == null) {
+            synchronized (initLock) {
+                if (worldFolder == null) {
+                    String exportName = "Export_" + LocalDateTime.now().format(TIMESTAMP);
+                    worldFolder = Path.of("downloaded_worlds", exportName);
+                    regionDir = worldFolder.resolve("region");
+                    try {
+                        Files.createDirectories(regionDir);
+                    } catch (IOException e) {
+                        System.out.println("[WD] Failed to create region directory: " + e.getMessage());
+                    }
+                    System.out.println("[WorldDownloader] Export folder: " + worldFolder);
                 }
             }
         }
     }
 
-    private static void startSaveThread() {
-        // Jeder Export bekommt einen eigenen Ordner — keine Kollisionen zwischen Sessions
-        String exportName = "Export_" + LocalDateTime.now().format(TIMESTAMP);
-        worldFolder = Path.of("downloaded_worlds", exportName);
-        regionDir = worldFolder.resolve("region");
-        try {
-            Files.createDirectories(regionDir);
-        } catch (IOException e) {
-            System.out.println("[WD] Failed to create region directory: " + e.getMessage());
-        }
+    /**
+     * Schreibt alle gecachten Chunks als MCA-Dateien in den Region-Ordner.
+     */
+    public static void flush() throws IOException {
+        if (chunkNbtCache.isEmpty() || regionDir == null) return;
 
-        running = true;
-        saveThread = new Thread(ChunkListener::saveLoop, "WD-ChunkSaver");
-        saveThread.setDaemon(true);
-        saveThread.start();
-        System.out.println("[WorldDownloader] Save thread started → " + worldFolder);
-    }
-
-    private static void saveLoop() {
-        while (running || !saveQueue.isEmpty()) {
-            ChunkEntry entry = saveQueue.poll();
-            if (entry == null) {
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    break;
-                }
-                continue;
-            }
-            writeChunk(entry.pos, entry.nbt);
-        }
-        closeAllRegionFiles();
-    }
-
-    private static void writeChunk(ChunkPos pos, NbtCompound nbt) {
-        try {
+        // Nach Region gruppieren
+        Map<Long, Map<ChunkPos, NbtCompound>> regions = new HashMap<>();
+        for (Map.Entry<ChunkPos, NbtCompound> entry : chunkNbtCache.entrySet()) {
+            ChunkPos pos = entry.getKey();
             int rx = Math.floorDiv(pos.x, 32);
             int rz = Math.floorDiv(pos.z, 32);
-            long regionKey = ((long) rx << 32) | (rz & 0xFFFFFFFFL);
-
-            RegionFile regionFile = openRegionFiles.get(regionKey);
-            if (regionFile == null) {
-                Path path = regionDir.resolve(String.format("r.%d.%d.mca", rx, rz));
-                StorageKey storageKey = new StorageKey("downloaded_world", World.OVERWORLD, "chunk");
-                regionFile = new RegionFile(storageKey, path, regionDir, true);
-                openRegionFiles.put(regionKey, regionFile);
-            }
-
-            try (DataOutputStream out = regionFile.getChunkOutputStream(pos)) {
-                NbtIo.write(nbt, out);
-            }
-        } catch (Exception e) {
-            System.out.println("[WD] Failed to save chunk " + pos.x + "," + pos.z + ": " + e.getMessage());
-            e.printStackTrace();
+            long key = ((long) rx << 32) | (rz & 0xFFFFFFFFL);
+            regions.computeIfAbsent(key, k -> new HashMap<>()).put(pos, entry.getValue());
         }
+
+        for (Map.Entry<Long, Map<ChunkPos, NbtCompound>> regionEntry : regions.entrySet()) {
+            long key = regionEntry.getKey();
+            int rx = (int) (key >> 32);
+            int rz = (int) key;
+            Path path = regionDir.resolve(String.format("r.%d.%d.mca", rx, rz));
+            writeMcaFile(path, regionEntry.getValue());
+        }
+
+        System.out.println("[WorldDownloader] Flushed " + chunkCount.get() + " chunks to "
+                + regions.size() + " region file(s).");
     }
 
-    public static void flush() {
-        if (!running) return;
-        while (!saveQueue.isEmpty()) {
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                break;
-            }
-        }
-    }
+    /**
+     * Schreibt eine einzelne MCA-Datei (Anvil-Format) mit dem angegebenen Chunk-Map.
+     * Kann auch von Exporter für entity-Regions genutzt werden.
+     */
+    public static void writeMcaFile(Path path, Map<ChunkPos, NbtCompound> chunks) throws IOException {
+        // Alle Chunks mit Zlib komprimieren
+        record CompressedChunk(int localX, int localZ, byte[] data) {}
+        List<CompressedChunk> compressed = new ArrayList<>();
 
-    public static void stop() {
-        running = false;
-        if (saveThread != null) {
-            try {
-                saveThread.join(5000);
-            } catch (InterruptedException e) {
-                // ignored
-            }
-            saveThread = null;
-        }
-        closeAllRegionFiles();
-    }
+        for (Map.Entry<ChunkPos, NbtCompound> entry : chunks.entrySet()) {
+            ChunkPos pos = entry.getKey();
+            int localX = Math.floorMod(pos.x, 32);
+            int localZ = Math.floorMod(pos.z, 32);
 
-    private static void closeAllRegionFiles() {
-        for (RegionFile rf : openRegionFiles.values()) {
-            try {
-                rf.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            try (DeflaterOutputStream deflate = new DeflaterOutputStream(baos)) {
+                NbtIo.write(entry.getValue(), new DataOutputStream(deflate));
+            }
+            compressed.add(new CompressedChunk(localX, localZ, baos.toByteArray()));
+        }
+
+        // Sektoren zuweisen — Sektor 0 + 1 = 8192-Byte-Header
+        int[] locationTable = new int[1024]; // (offset << 8) | count
+        record SectorInfo(int offset, byte[] data) {}
+        Map<Integer, SectorInfo> sectorMap = new HashMap<>();
+
+        int currentSector = 2;
+        for (CompressedChunk cc : compressed) {
+            // 4 Bytes Länge + 1 Byte Compression-Type + Daten
+            int totalBytes = 5 + cc.data().length;
+            int sectors = (totalBytes + 4095) / 4096;
+
+            int index = cc.localZ() * 32 + cc.localX();
+            locationTable[index] = (currentSector << 8) | Math.min(sectors, 255);
+            sectorMap.put(index, new SectorInfo(currentSector, cc.data()));
+            currentSector += sectors;
+        }
+
+        // MCA-Datei schreiben
+        try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "rw")) {
+            raf.setLength(0);
+
+            // Location-Tabelle (4096 Bytes)
+            for (int i = 0; i < 1024; i++) {
+                raf.writeInt(locationTable[i]);
+            }
+            // Timestamp-Tabelle (4096 Bytes, alle 0)
+            for (int i = 0; i < 1024; i++) {
+                raf.writeInt(0);
+            }
+
+            // Chunk-Daten sektor-aligned schreiben
+            for (Map.Entry<Integer, SectorInfo> entry : sectorMap.entrySet()) {
+                SectorInfo si = entry.getValue();
+                raf.seek((long) si.offset() * 4096);
+                raf.writeInt(si.data().length + 1); // Länge inkl. Compression-Byte
+                raf.writeByte(2);                   // Zlib
+                raf.write(si.data());
+
+                // Auf Sektorgrenze auffüllen
+                int written = 5 + si.data().length;
+                int pad = (4096 - (written % 4096)) % 4096;
+                if (pad > 0) {
+                    raf.write(new byte[pad]);
+                }
             }
         }
-        openRegionFiles.clear();
     }
 
     public static int getChunkCount() {
@@ -160,9 +169,12 @@ public class ChunkListener {
         return worldFolder;
     }
 
+    public static NbtCompound getCachedChunkNbt(ChunkPos pos) {
+        return chunkNbtCache.get(pos);
+    }
+
     public static void clear() {
-        stop();
-        saveQueue.clear();
+        chunkNbtCache.clear();
         chunkCount.set(0);
         dataVersion = 4671;
         worldFolder = null;

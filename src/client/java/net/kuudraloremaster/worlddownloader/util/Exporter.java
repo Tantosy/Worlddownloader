@@ -3,14 +3,11 @@ package net.kuudraloremaster.worlddownloader.util;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtList;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.storage.RegionFile;
-import net.minecraft.world.storage.StorageKey;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -28,7 +25,6 @@ public class Exporter {
             return;
         }
 
-        // Chunks are written incrementally by the save thread — just flush remaining
         ChunkListener.flush();
 
         int totalContainers = ContainerTracker.getTotalSavedContainers();
@@ -47,7 +43,7 @@ public class Exporter {
 
         int dataVersion = ChunkListener.getDataVersion();
 
-        // Group entities by region
+        // Nach Region gruppieren
         Map<Long, Map<ChunkPos, NbtCompound>> regionChunks = new HashMap<>();
         for (Map.Entry<ChunkPos, List<NbtCompound>> entry : allEntities.entrySet()) {
             ChunkPos pos = entry.getKey();
@@ -65,22 +61,16 @@ public class Exporter {
             regionChunks.computeIfAbsent(regionKey, k -> new HashMap<>()).put(pos, chunk);
         }
 
-        StorageKey storageKey = new StorageKey("downloaded_world", World.OVERWORLD, "entities");
-
         for (Map.Entry<Long, Map<ChunkPos, NbtCompound>> regionEntry : regionChunks.entrySet()) {
             long regionKey = regionEntry.getKey();
             int rx = (int) (regionKey >> 32);
             int rz = (int) regionKey;
             Path regionPath = entitiesDir.resolve(String.format("r.%d.%d.mca", rx, rz));
 
-            try (RegionFile regionFile = new RegionFile(storageKey, regionPath, entitiesDir, true)) {
-                for (Map.Entry<ChunkPos, NbtCompound> chunkEntry : regionEntry.getValue().entrySet()) {
-                    try (DataOutputStream out = regionFile.getChunkOutputStream(chunkEntry.getKey())) {
-                        NbtIo.write(chunkEntry.getValue(), out);
-                    }
-                }
+            try {
+                ChunkListener.writeMcaFile(regionPath, regionEntry.getValue());
                 System.out.println(" Successfully wrote entity region: " + regionPath.getFileName());
-            } catch (Exception e) {
+            } catch (IOException e) {
                 System.out.println(" Failed to write entity region: " + e.getMessage());
                 e.printStackTrace();
             }
