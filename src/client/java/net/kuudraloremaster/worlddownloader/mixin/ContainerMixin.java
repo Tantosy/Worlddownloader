@@ -3,7 +3,9 @@ package net.kuudraloremaster.worlddownloader.mixin;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.kuudraloremaster.worlddownloader.util.ContainerTracker;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.packet.s2c.play.CloseScreenS2CPacket;
 import net.minecraft.network.packet.s2c.play.InventoryS2CPacket;
@@ -23,6 +25,10 @@ public class ContainerMixin {
     @Inject(method = "onOpenScreen", at = @At("TAIL"))
     private void onOpenScreen(OpenScreenS2CPacket packet, CallbackInfo ci) {
         ContainerTracker.onContainerOpened(packet.getSyncId(), packet.getScreenHandlerType());
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.crosshairTarget instanceof BlockHitResult blockHit) {
+            ContainerTracker.setBlockPos(packet.getSyncId(), blockHit.getBlockPos());
+        }
     }
 
     @Inject(method = "onCloseScreen", at = @At("TAIL"))

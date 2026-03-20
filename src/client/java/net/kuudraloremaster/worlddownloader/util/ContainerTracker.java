@@ -5,10 +5,12 @@ import net.fabricmc.api.Environment;
 import net.minecraft.block.Block;
 import net.minecraft.block.ChestBlock;
 import net.minecraft.block.enums.ChestType;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.screen.ScreenHandlerType;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
@@ -28,6 +30,14 @@ public class ContainerTracker {
     public static void onContainerOpened(int syncId, ScreenHandlerType<?> type) {
         System.out.println(" Container opened at syncId=" + syncId);
         openContainers.put(syncId, new ContainerData(syncId));
+    }
+
+    public static void setBlockPos(int syncId, BlockPos pos) {
+        ContainerData data = openContainers.get(syncId);
+        if (data != null) {
+            data.blockPos = pos;
+            System.out.println("[WD] Set blockPos for syncId=" + syncId + " to " + pos);
+        }
     }
 
     public static void onContainerClosed(int syncId, ClientWorld world) {
@@ -114,16 +124,20 @@ public class ContainerTracker {
         nbt.putInt("z", pos.getZ());
         nbt.putBoolean("keepPacked", false);
 
+        var mc = MinecraftClient.getInstance();
+        var lookup = mc.world != null ? mc.world.getRegistryManager() : null;
+
         NbtList itemsList = new NbtList();
         for (int i = 0; i < items.size(); i++) {
             ItemStack stack = items.get(i);
-            if (!stack.isEmpty()) {
-                NbtCompound itemNbt = new NbtCompound();
-                itemNbt.putByte("Slot", (byte) i);
-                itemNbt.putString("id", net.minecraft.registry.Registries.ITEM
-                        .getId(stack.getItem()).toString());
-                itemNbt.putByte("Count", (byte) stack.getCount());
-                itemsList.add(itemNbt);
+            if (!stack.isEmpty() && lookup != null) {
+                final byte slotByte = (byte) i;
+                var result = ItemStack.CODEC.encodeStart(lookup.getOps(NbtOps.INSTANCE), stack).result();
+                result.ifPresent(el -> {
+                    NbtCompound itemNbt = (NbtCompound) el;
+                    itemNbt.putByte("Slot", slotByte);
+                    itemsList.add(itemNbt);
+                });
             }
         }
         nbt.put("Items", itemsList);
@@ -134,6 +148,10 @@ public class ContainerTracker {
         ContainerData data = openContainers.get(syncId);
         if (data == null) return;
         data.setInventory(stacks);
+        if (data.blockPos != null) {
+            NbtCompound nbt = data.toNbt();
+            if (nbt != null) savedContainerData.put(data.blockPos, nbt);
+        }
     }
 
     public static void onSlotUpdate(int syncId, int slot, ItemStack stack) {
@@ -212,6 +230,10 @@ public class ContainerTracker {
 
         public NbtCompound toNbt() {
             if (blockPos == null) return null;
+            var mc = MinecraftClient.getInstance();
+            if (mc.world == null) return null;
+            var lookup = mc.world.getRegistryManager();
+
             NbtCompound nbt = new NbtCompound();
             nbt.putString("id", "minecraft:chest");
             nbt.putInt("x", blockPos.getX());
@@ -222,12 +244,12 @@ public class ContainerTracker {
             NbtList itemsList = new NbtList();
             containerSlots.forEach((slot, stack) -> {
                 if (!stack.isEmpty()) {
-                    NbtCompound itemNbt = new NbtCompound();
-                    itemNbt.putByte("Slot", (byte) (int) slot);
-                    itemNbt.putString("id", net.minecraft.registry.Registries.ITEM
-                            .getId(stack.getItem()).toString());
-                    itemNbt.putByte("Count", (byte) stack.getCount());
-                    itemsList.add(itemNbt);
+                    var result = ItemStack.CODEC.encodeStart(lookup.getOps(NbtOps.INSTANCE), stack).result();
+                    result.ifPresent(el -> {
+                        NbtCompound itemNbt = (NbtCompound) el;
+                        itemNbt.putByte("Slot", (byte) (int) slot);
+                        itemsList.add(itemNbt);
+                    });
                 }
             });
             nbt.put("Items", itemsList);

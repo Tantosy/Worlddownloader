@@ -97,12 +97,14 @@ public class WorldExporter {
 
         NbtCompound overworld = new NbtCompound();
         NbtCompound overworldGen = new NbtCompound();
-        overworldGen.putString("type", "minecraft:noise");
-        overworldGen.putString("settings", "minecraft:overworld");
-        NbtCompound overworldBiomeSource = new NbtCompound();
-        overworldBiomeSource.putString("type", "minecraft:multi_noise");
-        overworldBiomeSource.putString("preset", "minecraft:overworld");
-        overworldGen.put("biome_source", overworldBiomeSource);
+        overworldGen.putString("type", "minecraft:flat");
+        NbtCompound flatSettings = new NbtCompound();
+        flatSettings.put("layers", new NbtList()); // keine Blöcke → Void
+        flatSettings.putString("biome", "minecraft:the_void");
+        flatSettings.putBoolean("features", false);
+        flatSettings.putBoolean("lakes", false);
+        flatSettings.put("structure_overrides", new NbtList());
+        overworldGen.put("settings", flatSettings);
         overworld.put("generator", overworldGen);
         overworld.putString("type", "minecraft:overworld");
         dimensions.put("minecraft:overworld", overworld);

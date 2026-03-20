@@ -9,6 +9,7 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtString;
 import net.minecraft.registry.Registries;
+import net.minecraft.util.StringIdentifiable;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.Heightmap;
@@ -68,6 +69,11 @@ public class ClientChunkSerializer {
             BlockEntity be = entry.getValue();
             try {
                 NbtCompound beNbt = be.createNbt(world.getRegistryManager());
+                net.minecraft.util.Identifier beId = net.minecraft.registry.Registries.BLOCK_ENTITY_TYPE.getId(be.getType());
+                if (beId != null) beNbt.putString("id", beId.toString());
+                beNbt.putInt("x", pos.getX());
+                beNbt.putInt("y", pos.getY());
+                beNbt.putInt("z", pos.getZ());
                 beNbt = ContainerTracker.enhanceBlockEntityWithContainerData(pos, beNbt);
                 beNbt.putBoolean("keepPacked", false);
                 blockEntitiesNbt.add(beNbt);
@@ -110,8 +116,10 @@ public class ClientChunkSerializer {
             stateNbt.putString("Name", Registries.BLOCK.getId(state.getBlock()).toString());
             if (!state.getEntries().isEmpty()) {
                 NbtCompound props = new NbtCompound();
-                state.getEntries().forEach((prop, val) ->
-                    props.putString(prop.getName(), val.toString()));
+                state.getEntries().forEach((prop, val) -> {
+                    String valStr = val instanceof StringIdentifiable si ? si.asString() : val.toString();
+                    props.putString(prop.getName(), valStr);
+                });
                 stateNbt.put("Properties", props);
             }
             paletteNbt.add(stateNbt);
