@@ -7,7 +7,8 @@
     "BlockInteractionMixin",
     "ChunkDataPacketAccessor",
     "ContainerMixin",
-    "DebugContainerMixin"
+    "DebugContainerMixin",
+    "SelectWorldScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1
