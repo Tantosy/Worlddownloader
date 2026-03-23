@@ -1,0 +1,21 @@
+# World Downloader Mod - Status
+
+## Aktuelle Bugs zu fixen:
+- DownloadedWorldsScreen: Weltliste wird nicht korrekt angezeigt
+- DownloadedWorldsScreen: Hintergrund fehlt
+- DownloadedWorldsScreen: Titel fehlt
+- Kisteninhalt wird nicht gespeichert
+- Language Files fehlen noch
+
+## Projektstruktur:
+- Minecraft 1.21.11, Fabric
+- src/client/java/... - alle Mod-Dateien
+- downloaded_worlds/ - exportierte Welten
+- ./gradlew runClient - Minecraft starten
+- ./gradlew build - bauen
+
+## Wichtige Klassen:
+- DownloadedWorldsScreen.java - GUI für Downloaded Worlds
+- ChunkListener.java - Chunk-Speicherung mit ConcurrentLinkedQueue
+- WorldExporter.java - level.dat generierung
+- Exporter.java - MCA Region Files

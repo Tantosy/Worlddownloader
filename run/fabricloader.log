@@ -1,0 +1,2 @@
+[16:15:12] [WARN] [FabricLoader/Knot]: Class path entries reference missing files: /home/benjamin/Downloads/worlddownloader/build/resources/client, /home/benjamin/Downloads/worlddownloader/build/classes/java/main - the game may not load properly!
+[16:15:12] [INFO] [FabricLoader/GameProvider]: Loading Minecraft 1.21.11 with Fabric Loader 0.18.4

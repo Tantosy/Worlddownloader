@@ -4,11 +4,5 @@
     "key.category.worlddownloader.category": "World Downloader",
 
     "worlddownloader.gui.downloaded_worlds": "Heruntergeladene Welten",
-    "worlddownloader.gui.downloaded_worlds_title": "Heruntergeladene Welten",
-    "worlddownloader.gui.play_selected": "Ausgewählte Welt spielen",
-    "worlddownloader.gui.delete_world": "Löschen",
-    "worlddownloader.gui.back": "Zurück",
-    "worlddownloader.gui.error_loading": "Fehler beim Laden der Welt",
-    "worlddownloader.gui.delete_confirm_title": "Welt löschen?",
-    "worlddownloader.gui.delete_confirm_body": "Sicher, dass du \"%s\" löschen möchtest? Das kann nicht rückgängig gemacht werden."
+    "worlddownloader.gui.normal_worlds": "Normale Welten"
 }

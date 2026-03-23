@@ -4,11 +4,5 @@
     "key.category.worlddownloader.category": "World Downloader",
 
     "worlddownloader.gui.downloaded_worlds": "Downloaded Worlds",
-    "worlddownloader.gui.downloaded_worlds_title": "Downloaded Worlds",
-    "worlddownloader.gui.play_selected": "Play Selected World",
-    "worlddownloader.gui.delete_world": "Delete",
-    "worlddownloader.gui.back": "Back",
-    "worlddownloader.gui.error_loading": "Error loading world",
-    "worlddownloader.gui.delete_confirm_title": "Delete World?",
-    "worlddownloader.gui.delete_confirm_body": "Are you sure you want to delete \"%s\"? This cannot be undone."
+    "worlddownloader.gui.normal_worlds": "Normal Worlds"
 }

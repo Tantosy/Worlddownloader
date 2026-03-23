@@ -2,6 +2,7 @@ package net.kuudraloremaster.worlddownloader.util;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.util.math.ChunkPos;
@@ -47,7 +48,9 @@ public class ChunkListener {
             synchronized (initLock) {
                 if (worldFolder == null) {
                     String exportName = "Export_" + LocalDateTime.now().format(TIMESTAMP);
-                    worldFolder = Path.of("downloaded_worlds", exportName);
+                    worldFolder = MinecraftClient.getInstance().runDirectory.toPath()
+                            .resolve("downloaded_worlds")
+                            .resolve(exportName);
                     regionDir = worldFolder.resolve("region");
                     try {
                         Files.createDirectories(regionDir);
