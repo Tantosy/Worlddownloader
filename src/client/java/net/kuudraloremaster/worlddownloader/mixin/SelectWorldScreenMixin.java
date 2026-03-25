@@ -29,6 +29,19 @@ public abstract class SelectWorldScreenMixin extends Screen {
     @Inject(method = "init", at = @At("TAIL"))
     private void addDownloadedWorldsButton(CallbackInfo ci) {
         boolean active = WorldFolderManager.isDownloadedWorldsActive();
+
+        // Fall 2: Letzte Welt gelöscht → automatisch zurück zu saves/
+        if (active && !WorldFolderManager.hasDownloadedWorlds(this.client)) {
+            WorldFolderManager.toggle(this.client);
+            this.client.setScreen(new SelectWorldScreen(this.parent));
+            return;
+        }
+
+        // Fall 1: Button verstecken wenn downloaded_worlds/ leer und noch nicht aktiv
+        if (!active && !WorldFolderManager.hasDownloadedWorlds(this.client)) {
+            return;
+        }
+
         Text label = active
                 ? Text.translatable("worlddownloader.gui.normal_worlds")
                 : Text.translatable("worlddownloader.gui.downloaded_worlds");

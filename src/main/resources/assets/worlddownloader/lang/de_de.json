@@ -4,5 +4,6 @@
     "key.category.worlddownloader.category": "World Downloader",
 
     "worlddownloader.gui.downloaded_worlds": "Heruntergeladene Welten",
-    "worlddownloader.gui.normal_worlds": "Normale Welten"
+    "worlddownloader.gui.normal_worlds": "Normale Welten",
+    "worlddownloader.gui.no_downloaded_worlds": "Keine heruntergeladenen Welten vorhanden"
 }
