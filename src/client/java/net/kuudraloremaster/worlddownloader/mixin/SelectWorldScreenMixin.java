@@ -29,28 +29,22 @@ public abstract class SelectWorldScreenMixin extends Screen {
     @Inject(method = "init", at = @At("TAIL"))
     private void addDownloadedWorldsButton(CallbackInfo ci) {
         boolean active = WorldFolderManager.isDownloadedWorldsActive();
-
-        // Fall 2: Letzte Welt gelöscht → automatisch zurück zu saves/
-        if (active && !WorldFolderManager.hasDownloadedWorlds(this.client)) {
-            WorldFolderManager.toggle(this.client);
-            this.client.setScreen(new SelectWorldScreen(this.parent));
-            return;
-        }
-
-        // Fall 1: Button verstecken wenn downloaded_worlds/ leer und noch nicht aktiv
-        if (!active && !WorldFolderManager.hasDownloadedWorlds(this.client)) {
-            return;
-        }
+        boolean hasDownloaded = WorldFolderManager.hasDownloadedWorlds(this.client);
 
         Text label = active
                 ? Text.translatable("worlddownloader.gui.normal_worlds")
                 : Text.translatable("worlddownloader.gui.downloaded_worlds");
 
-        this.addDrawableChild(
-                ButtonWidget.builder(label, btn -> {
-                    WorldFolderManager.toggle(this.client);
-                    this.client.setScreen(new SelectWorldScreen(this.parent));
-                }).dimensions(this.width / 2 + 156, this.height - 52, 150, 20).build()
-        );
+        ButtonWidget button = ButtonWidget.builder(label, btn -> {
+            WorldFolderManager.toggle(this.client);
+            this.client.setScreen(new SelectWorldScreen(this.parent));
+        }).dimensions(this.width / 2 + 156, this.height - 52, 150, 20).build();
+
+        // Button deaktivieren wenn downloaded_worlds/ leer ist und man wechseln würde
+        if (!active && !hasDownloaded) {
+            button.active = false;
+        }
+
+        this.addDrawableChild(button);
     }
 }
