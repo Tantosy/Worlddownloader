@@ -13,7 +13,10 @@ import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.screen.ScreenHandlerType;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.world.chunk.WorldChunk;
+import net.kuudraloremaster.worlddownloader.config.ModConfig;
 
 import java.util.List;
 import java.util.Map;
@@ -41,6 +44,13 @@ public class ContainerTracker {
     }
 
     public static void onContainerClosed(int syncId, ClientWorld world) {
+        // Prüfen ob Container-Speichern aktiviert ist
+        if (!ModConfig.getInstance().isSaveContainers()) {
+            openContainers.remove(syncId);
+            System.out.println(" Container closed - not saving (SaveContainers disabled)");
+            return;
+        }
+
         ContainerData data = openContainers.remove(syncId);
         if (data == null) return;
 
@@ -54,7 +64,7 @@ public class ContainerTracker {
             var blockState = world.getBlockState(data.blockPos);
             Block block = blockState.getBlock();
 
-            if (block instanceof ChestBlock) {
+            if (block instanceof ChestBlock || block instanceof net.minecraft.block.TrappedChestBlock) {
                 handleDoubleChest(world, data, blockState);
             } else {
                 handleRegularContainer(data);
@@ -79,26 +89,33 @@ public class ContainerTracker {
                 return;
             }
 
-            BlockPos leftChestPos = data.blockPos;
-            BlockPos rightChestPos = data.blockPos.offset(adjacentDirection);
+            // RIGHT-Block bekommt immer Slots 0–26, LEFT-Block bekommt Slots 27–53
+            BlockPos rightPos, leftPos;
+            if (chestType == ChestType.RIGHT) {
+                rightPos = data.blockPos;
+                leftPos = data.blockPos.offset(adjacentDirection);
+            } else {
+                leftPos = data.blockPos;
+                rightPos = data.blockPos.offset(adjacentDirection);
+            }
 
-            int totalSlots = data.getSlotCount();
-            int half = totalSlots / 2;
-            List<ItemStack> leftChestItems = data.getItemsRange(0, half);
-            List<ItemStack> rightChestItems = data.getItemsRange(half, totalSlots);
+            List<ItemStack> rightItems = data.getItemsRange(0, 27);
+            List<ItemStack> leftItems = data.getItemsRange(27, 54);
 
-            NbtCompound leftChestNbt = buildChestNbt(leftChestPos, leftChestItems, chestType, facing);
-            NbtCompound rightChestNbt = buildChestNbt(rightChestPos, rightChestItems,
-                    chestType == ChestType.LEFT ? ChestType.RIGHT : ChestType.LEFT, facing);
+            NbtCompound rightNbt = buildChestNbt(rightPos, rightItems, ChestType.RIGHT, facing);
+            NbtCompound leftNbt = buildChestNbt(leftPos, leftItems, ChestType.LEFT, facing);
 
-            savedContainerData.put(leftChestPos, leftChestNbt);
-            savedContainerData.put(rightChestPos, rightChestNbt);
+            savedContainerData.put(rightPos, rightNbt);
+            savedContainerData.put(leftPos, leftNbt);
 
-            long leftNonEmpty = leftChestItems.stream().filter(s -> !s.isEmpty()).count();
-            long rightNonEmpty = rightChestItems.stream().filter(s -> !s.isEmpty()).count();
+            long rightNonEmpty = rightItems.stream().filter(s -> !s.isEmpty()).count();
+            long leftNonEmpty = leftItems.stream().filter(s -> !s.isEmpty()).count();
             System.out.println(" Saved double chest:");
-            System.out.println("    - Left chest at " + leftChestPos + " with " + leftNonEmpty + " filled slots");
-            System.out.println("    - Right chest at " + rightChestPos + " with " + rightNonEmpty + " filled slots");
+            System.out.println("    - Right chest at " + rightPos + " with " + rightNonEmpty + " filled slots");
+            System.out.println("    - Left chest at " + leftPos + " with " + leftNonEmpty + " filled slots");
+
+            resaveChunkForPos(rightPos);
+            resaveChunkForPos(leftPos);
         } catch (Exception e) {
             System.out.println(" Failed to handle double chest, falling back to regular container: " + e.getMessage());
             handleRegularContainer(data);
@@ -112,19 +129,40 @@ public class ContainerTracker {
             savedContainerData.put(data.blockPos, nbt);
             long nonEmpty = data.getAllItems().stream().filter(s -> !s.isEmpty()).count();
             System.out.println(" Saved regular container at " + data.blockPos + " with " + nonEmpty + " filled slots");
+            resaveChunkForPos(data.blockPos);
         }
+    }
+
+    /**
+     * Serialisiert den Chunk neu und aktualisiert den ChunkListener-Cache.
+     * Nötig weil der Cache beim ersten Chunk-Load befüllt wurde — vor dem Container-Open.
+     * ClientChunkSerializer.serialize() ruft enhanceBlockEntityWithContainerData() auf,
+     * sodass der neue Cache-Eintrag die Kisten-Items enthält.
+     */
+    private static void resaveChunkForPos(BlockPos pos) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.world == null) return;
+        ChunkPos chunkPos = new ChunkPos(pos);
+        WorldChunk chunk = mc.world.getChunk(chunkPos.x, chunkPos.z);
+        NbtCompound nbt = ClientChunkSerializer.serialize(mc.world, chunk);
+        ChunkListener.addChunkNbt(chunkPos, nbt);
+        System.out.println("[WD] Re-serialized chunk " + chunkPos + " after container close");
     }
 
     private static NbtCompound buildChestNbt(BlockPos pos, List<ItemStack> items,
                                               ChestType chestType, Direction facing) {
         NbtCompound nbt = new NbtCompound();
-        nbt.putString("id", "minecraft:chest");
+        var mc = MinecraftClient.getInstance();
+        var blockEntity = mc.world != null ? mc.world.getBlockEntity(pos) : null;
+        String id = blockEntity != null
+                ? net.minecraft.registry.Registries.BLOCK_ENTITY_TYPE.getId(blockEntity.getType()).toString()
+                : "minecraft:chest";
+        nbt.putString("id", id);
         nbt.putInt("x", pos.getX());
         nbt.putInt("y", pos.getY());
         nbt.putInt("z", pos.getZ());
         nbt.putBoolean("keepPacked", false);
 
-        var mc = MinecraftClient.getInstance();
         var lookup = mc.world != null ? mc.world.getRegistryManager() : null;
 
         NbtList itemsList = new NbtList();
@@ -234,8 +272,13 @@ public class ContainerTracker {
             if (mc.world == null) return null;
             var lookup = mc.world.getRegistryManager();
 
+            var blockEntity = mc.world.getBlockEntity(blockPos);
+            String id = blockEntity != null
+                    ? net.minecraft.registry.Registries.BLOCK_ENTITY_TYPE.getId(blockEntity.getType()).toString()
+                    : "minecraft:chest";
+
             NbtCompound nbt = new NbtCompound();
-            nbt.putString("id", "minecraft:chest");
+            nbt.putString("id", id);
             nbt.putInt("x", blockPos.getX());
             nbt.putInt("y", blockPos.getY());
             nbt.putInt("z", blockPos.getZ());

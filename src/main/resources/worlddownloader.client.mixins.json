@@ -7,11 +7,15 @@
     "BlockInteractionMixin",
     "ChunkDataPacketAccessor",
     "ContainerMixin",
+    "HandledScreenMixin",
     "DebugContainerMixin",
     "SelectWorldScreenMixin",
     "TitleScreenMixin",
-    "WorldListWidgetMixin",
-    "LevelStorageMixin"
+    "WorldEntryMixin",
+    "LevelStorageMixin",
+    "ClientPlayNetworkHandlerMixin",
+    "ServerResourcePackManagerMixin",
+    "WorldListWidgetMixin"
   ],
   "injectors": {
     "defaultRequire": 1

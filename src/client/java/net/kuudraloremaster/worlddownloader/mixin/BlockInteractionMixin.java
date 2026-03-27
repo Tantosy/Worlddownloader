@@ -2,6 +2,7 @@ package net.kuudraloremaster.worlddownloader.mixin;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.kuudraloremaster.worlddownloader.WorldDownloaderClient;
 import net.kuudraloremaster.worlddownloader.util.ChunkListener;
 import net.kuudraloremaster.worlddownloader.util.ClientChunkSerializer;
 import net.minecraft.block.BlockState;
@@ -71,6 +72,7 @@ public class BlockInteractionMixin {
     }
 
     private static void resaveChunk(BlockPos blockPos) {
+        if (!WorldDownloaderClient.isRecording()) return;
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world == null) return;
 

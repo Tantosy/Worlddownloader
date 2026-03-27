@@ -1,0 +1,5 @@
+/time set day
+/register 12908-712978
+/register 12345678 12345678
+/login 12345678
+/login 87654321

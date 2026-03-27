@@ -2,6 +2,7 @@ package net.kuudraloremaster.worlddownloader.mixin;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.kuudraloremaster.worlddownloader.WorldDownloaderClient;
 import net.kuudraloremaster.worlddownloader.util.ChunkListener;
 import net.kuudraloremaster.worlddownloader.util.ClientChunkSerializer;
 import net.minecraft.client.world.ClientChunkManager;
@@ -31,6 +32,8 @@ public class ClientChunkManagerMixin {
     private void onLoadChunkFromPacket(int x, int z, PacketByteBuf buf,
             Map<Heightmap.Type, long[]> heightmaps, Consumer<?> consumer,
             CallbackInfoReturnable<WorldChunk> cir) {
+        if (!WorldDownloaderClient.isRecording()) return;
+
         WorldChunk chunk = cir.getReturnValue();
         if (chunk == null) return;
 

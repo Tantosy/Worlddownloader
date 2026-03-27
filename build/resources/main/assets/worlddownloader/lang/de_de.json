@@ -1,9 +1,30 @@
 {
+    "key.worlddownloader.record": "Aufnahme starten/stoppen",
     "key.worlddownloader.export": "Welt exportieren",
     "key.worlddownloader.clear": "Cache leeren",
     "key.category.worlddownloader.category": "World Downloader",
 
     "worlddownloader.gui.downloaded_worlds": "Heruntergeladene Welten",
     "worlddownloader.gui.normal_worlds": "Normale Welten",
-    "worlddownloader.gui.no_downloaded_worlds": "Keine heruntergeladenen Welten vorhanden"
+    "worlddownloader.gui.no_downloaded_worlds": "Keine heruntergeladenen Welten vorhanden",
+
+    "worlddownloader.config.title": "World Downloader Einstellungen",
+    "worlddownloader.config.category.general": "Allgemein",
+    "worlddownloader.config.category.export": "Export",
+    "worlddownloader.config.on": "AN",
+    "worlddownloader.config.off": "AUS",
+    "worlddownloader.config.done": "Fertig",
+    "worlddownloader.config.reset": "Zurücksetzen",
+    "worlddownloader.config.autoExportServer": "Auto-Export Server",
+    "worlddownloader.config.autoExportSingleplayer": "Auto-Export Singleplayer",
+    "worlddownloader.config.autoStartServer": "Auto-Start Server",
+    "worlddownloader.config.autoStartSingleplayer": "Auto-Start Singleplayer",
+    "worlddownloader.config.exportWithTexturePack": "Mit Texturpaket exportieren",
+    "worlddownloader.config.saveContainers": "Container speichern",
+    "worlddownloader.config.desc.autoExportServer": "Welt automatisch exportieren, wenn der Server verlassen wird",
+    "worlddownloader.config.desc.autoExportSingleplayer": "Singleplayer-Welten automatisch exportieren beim Verlassen der Welt (AUS = nichts speichern)",
+    "worlddownloader.config.desc.autoStartServer": "Automatisch mit der Aufnahme beginnen, wenn ein Server betreten wird (kein I drücken nötig)",
+    "worlddownloader.config.desc.autoStartSingleplayer": "Automatisch mit der Aufnahme beginnen, wenn eine Singleplayer-Welt geladen wird (kein I drücken nötig)",
+    "worlddownloader.config.desc.exportWithTexturePack": "Server-Texturpaket im Export einschließen",
+    "worlddownloader.config.desc.saveContainers": "Inventare von Containern (Truhen, Fässer, etc.) beim Export speichern"
 }

@@ -22,7 +22,6 @@ public class ChunkListener {
 
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm");
 
-    // In-memory store — alle Chunks bis zum Export im RAM halten
     private static final ConcurrentHashMap<ChunkPos, NbtCompound> chunkNbtCache = new ConcurrentHashMap<>();
     private static final AtomicInteger chunkCount = new AtomicInteger(0);
     private static volatile int dataVersion = 4671;
@@ -64,12 +63,13 @@ public class ChunkListener {
     }
 
     /**
-     * Schreibt alle gecachten Chunks als MCA-Dateien in den Region-Ordner.
+     * Schreibt alle gecachten Chunks als MCA-Dateien.
+     * Läuft direkt auf dem aufrufenden Thread (WD-ExportThread).
      */
     public static void flush() throws IOException {
-        if (chunkNbtCache.isEmpty() || regionDir == null) return;
+        Path currentRegionDir = regionDir; // lokale Kopie — schützt gegen concurrent clear()
+        if (chunkNbtCache.isEmpty() || currentRegionDir == null) return;
 
-        // Nach Region gruppieren
         Map<Long, Map<ChunkPos, NbtCompound>> regions = new HashMap<>();
         for (Map.Entry<ChunkPos, NbtCompound> entry : chunkNbtCache.entrySet()) {
             ChunkPos pos = entry.getKey();
@@ -83,7 +83,7 @@ public class ChunkListener {
             long key = regionEntry.getKey();
             int rx = (int) (key >> 32);
             int rz = (int) key;
-            Path path = regionDir.resolve(String.format("r.%d.%d.mca", rx, rz));
+            Path path = currentRegionDir.resolve(String.format("r.%d.%d.mca", rx, rz));
             writeMcaFile(path, regionEntry.getValue());
         }
 
@@ -92,11 +92,9 @@ public class ChunkListener {
     }
 
     /**
-     * Schreibt eine einzelne MCA-Datei (Anvil-Format) mit dem angegebenen Chunk-Map.
-     * Kann auch von Exporter für entity-Regions genutzt werden.
+     * Schreibt eine einzelne MCA-Datei (Anvil-Format).
      */
     public static void writeMcaFile(Path path, Map<ChunkPos, NbtCompound> chunks) throws IOException {
-        // Alle Chunks mit Zlib komprimieren
         record CompressedChunk(int localX, int localZ, byte[] data) {}
         List<CompressedChunk> compressed = new ArrayList<>();
 
@@ -113,23 +111,20 @@ public class ChunkListener {
         }
 
         // Sektoren zuweisen — Sektor 0 + 1 = 8192-Byte-Header
-        int[] locationTable = new int[1024]; // (offset << 8) | count
+        int[] locationTable = new int[1024]; // (offset << 8) | sectorCount
         record SectorInfo(int offset, byte[] data) {}
         Map<Integer, SectorInfo> sectorMap = new HashMap<>();
 
         int currentSector = 2;
         for (CompressedChunk cc : compressed) {
-            // 4 Bytes Länge + 1 Byte Compression-Type + Daten
-            int totalBytes = 5 + cc.data().length;
+            int totalBytes = 5 + cc.data().length; // 4 Bytes Länge + 1 Byte Compression-Type + Daten
             int sectors = (totalBytes + 4095) / 4096;
-
             int index = cc.localZ() * 32 + cc.localX();
             locationTable[index] = (currentSector << 8) | Math.min(sectors, 255);
             sectorMap.put(index, new SectorInfo(currentSector, cc.data()));
             currentSector += sectors;
         }
 
-        // MCA-Datei schreiben
         try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "rw")) {
             raf.setLength(0);
 

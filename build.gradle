@@ -10,10 +10,15 @@ base {
 }
 
 repositories {
+	maven {
+		name = "TerraformersMC"
+		url = "https://maven.terraformersmc.com/"
+	}
 }
 
 loom {
 	splitEnvironmentSourceSets()
+	accessWidenerPath = file("src/main/resources/worlddownloader.accesswidener")
 
 	mods {
 		"worlddownloader" {
@@ -28,6 +33,7 @@ dependencies {
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	modImplementation "com.terraformersmc:modmenu:17.0.0"
 }
 
 processResources {
@@ -51,4 +57,25 @@ jar {
 	from("LICENSE") {
 		rename { "${it}_${project.base.archivesName.get()}" }
 	}
+}
+
+// Task to copy JAR to Prism Launcher mods folder
+tasks.register('installToPrism', Copy) {
+	dependsOn build
+	from file("${buildDir}/libs/${project.archives_base_name}-${project.version}.jar")
+	into file("/home/benjamin/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.21.11(1)/minecraft/mods")
+	rename { "${project.archives_base_name}-${project.version}.jar" }
+	doFirst {
+		// Delete old worlddownloader JARs
+		def modsDir = file("/home/benjamin/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.21.11(1)/minecraft/mods")
+		if (modsDir.exists()) {
+			modsDir.eachFile { file ->
+				if (file.name.startsWith("worlddownloader-") && file.name.endsWith(".jar")) {
+					println " Deleting old: ${file.name}"
+					file.delete()
+				}
+			}
+		}
+	}
+	println " Will install to: /home/benjamin/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.21.11(1)/minecraft/mods"
 }

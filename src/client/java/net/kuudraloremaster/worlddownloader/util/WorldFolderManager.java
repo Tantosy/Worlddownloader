@@ -27,6 +27,12 @@ public class WorldFolderManager {
         }
     }
 
+    public static Path getSavesDirectory(MinecraftClient client) {
+        return downloadedWorldsActive
+                ? client.runDirectory.toPath().resolve("downloaded_worlds")
+                : client.runDirectory.toPath().resolve("saves");
+    }
+
     public static void toggle(MinecraftClient client) {
         LevelStorage levelStorage = client.getLevelStorage();
         if (!downloadedWorldsActive) {

@@ -2,6 +2,7 @@ package net.kuudraloremaster.worlddownloader.mixin;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.kuudraloremaster.worlddownloader.WorldDownloaderClient;
 import net.kuudraloremaster.worlddownloader.util.ChunkListener;
 import net.kuudraloremaster.worlddownloader.util.ClientChunkSerializer;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
@@ -20,6 +21,8 @@ public class ChunkDataMixin {
 
     @Inject(method = "onChunkData", at = @At("TAIL"))
     private void onChunkData(ChunkDataS2CPacket packet, CallbackInfo ci) {
+        if (!WorldDownloaderClient.isRecording()) return;
+
         ClientPlayNetworkHandler handler = (ClientPlayNetworkHandler) (Object) this;
         var world = handler.getWorld();
         if (world == null) return;

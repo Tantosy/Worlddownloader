@@ -2,6 +2,7 @@ package net.kuudraloremaster.worlddownloader.mixin;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.kuudraloremaster.worlddownloader.util.WorldFolderManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.world.CreateWorldScreen;
 import net.minecraft.client.gui.screen.world.WorldListWidget;
@@ -13,7 +14,7 @@ import java.util.List;
 
 @Environment(EnvType.CLIENT)
 @Mixin(WorldListWidget.class)
-public class WorldListWidgetMixin {
+public abstract class WorldListWidgetMixin {
 
     // WorldListWidget.show(List) ruft CreateWorldScreen.show() auf wenn die Weltliste leer ist.
     // Wenn wir im downloaded_worlds/ Modus sind, soll stattdessen einfach die leere Liste angezeigt werden.

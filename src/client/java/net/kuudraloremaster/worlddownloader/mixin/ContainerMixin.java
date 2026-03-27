@@ -2,12 +2,12 @@ package net.kuudraloremaster.worlddownloader.mixin;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.kuudraloremaster.worlddownloader.WorldDownloaderClient;
 import net.kuudraloremaster.worlddownloader.util.ContainerTracker;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.s2c.play.CloseScreenS2CPacket;
 import net.minecraft.network.packet.s2c.play.InventoryS2CPacket;
 import net.minecraft.network.packet.s2c.play.OpenScreenS2CPacket;
 import net.minecraft.network.packet.s2c.play.ScreenHandlerSlotUpdateS2CPacket;
@@ -24,6 +24,7 @@ public class ContainerMixin {
 
     @Inject(method = "onOpenScreen", at = @At("TAIL"))
     private void onOpenScreen(OpenScreenS2CPacket packet, CallbackInfo ci) {
+        if (!WorldDownloaderClient.isRecording()) return;
         ContainerTracker.onContainerOpened(packet.getSyncId(), packet.getScreenHandlerType());
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.crosshairTarget instanceof BlockHitResult blockHit) {
@@ -31,20 +32,16 @@ public class ContainerMixin {
         }
     }
 
-    @Inject(method = "onCloseScreen", at = @At("TAIL"))
-    private void onCloseScreen(CloseScreenS2CPacket packet, CallbackInfo ci) {
-        ClientPlayNetworkHandler handler = (ClientPlayNetworkHandler) (Object) this;
-        ContainerTracker.onContainerClosed(packet.getSyncId(), handler.getWorld());
-    }
-
     @Inject(method = "onInventory", at = @At("TAIL"))
     private void onInventory(InventoryS2CPacket packet, CallbackInfo ci) {
+        if (!WorldDownloaderClient.isRecording()) return;
         List<ItemStack> stacks = packet.contents();
         ContainerTracker.onInventoryUpdate(packet.syncId(), stacks);
     }
 
     @Inject(method = "onScreenHandlerSlotUpdate", at = @At("TAIL"))
     private void onScreenHandlerSlotUpdate(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci) {
+        if (!WorldDownloaderClient.isRecording()) return;
         ContainerTracker.onSlotUpdate(packet.getSyncId(), packet.getSlot(), packet.getStack());
     }
 }

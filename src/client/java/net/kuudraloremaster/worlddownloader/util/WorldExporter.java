@@ -2,6 +2,7 @@ package net.kuudraloremaster.worlddownloader.util;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.kuudraloremaster.worlddownloader.WorldDownloaderClient;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.item.ItemStack;
@@ -14,6 +15,8 @@ import net.minecraft.util.math.MathHelper;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 @Environment(EnvType.CLIENT)
 public class WorldExporter {
@@ -40,6 +43,9 @@ public class WorldExporter {
             writeEmptyAdvancements(worldFolder, client);
             writeEmptyStats(worldFolder, client);
 
+            // Copy server resource pack if available
+            copyResourcePack(worldFolder);
+
             System.out.println(" World structure created at: " + worldFolder.getAbsolutePath());
         } catch (Exception e) {
             System.out.println(" Failed to create world structure: " + e.getMessage());
@@ -59,7 +65,7 @@ public class WorldExporter {
         levelDat.putLong("DayTime", client.world != null ? client.world.getTimeOfDay() : 6000L);
         levelDat.putInt("GameType", 1); // Creative
         levelDat.putBoolean("hardcore", false);
-        levelDat.putBoolean("allowCommands", false);
+        levelDat.putBoolean("allowCommands", true);
         levelDat.putByte("Difficulty", (byte) 2);
         levelDat.putBoolean("DifficultyLocked", false);
         levelDat.putBoolean("initialized", true);
@@ -353,6 +359,37 @@ public class WorldExporter {
 
         System.out.println("[WD] SpawnY Fallback: 64");
         return 64;
+    }
+
+    /**
+     * Kopiert das Server-Resource-Pack in den Weltordner als resources.zip
+     */
+    private static void copyResourcePack(File worldFolder) {
+        java.nio.file.Path source = null;
+
+        // First try the cached location from DownloadResult
+        if (WorldDownloaderClient.resourcePackLocation != null) {
+            if (Files.exists(WorldDownloaderClient.resourcePackLocation)) {
+                source = WorldDownloaderClient.resourcePackLocation;
+                System.out.println(" [ResourcePack] Using cached resource pack location: " + source);
+            } else {
+                System.out.println(" [ResourcePack] Cached location exists but file not found: " + WorldDownloaderClient.resourcePackLocation);
+            }
+        }
+
+        if (source == null) {
+            System.out.println(" [ResourcePack] No server resource pack found to copy");
+            return;
+        }
+
+        try {
+            java.nio.file.Path dest = worldFolder.toPath().resolve("resources.zip");
+            Files.copy(source, dest, StandardCopyOption.REPLACE_EXISTING);
+            System.out.println(" [ResourcePack] Resource pack copied to: " + dest);
+        } catch (IOException e) {
+            System.out.println(" [ResourcePack] Failed to copy resource pack: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**

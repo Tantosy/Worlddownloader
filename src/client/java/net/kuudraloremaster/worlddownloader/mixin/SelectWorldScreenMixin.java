@@ -7,23 +7,29 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.world.SelectWorldScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.stream.Stream;
 
 @Environment(EnvType.CLIENT)
 @Mixin(SelectWorldScreen.class)
 public abstract class SelectWorldScreenMixin extends Screen {
 
-    @Final
-    @Shadow
-    protected Screen parent;
-
     protected SelectWorldScreenMixin() {
-        super(Text.empty());
+        super(null, null, Text.empty());
+    }
+
+    @Inject(method = "init", at = @At("HEAD"))
+    private void onInitHead(CallbackInfo ci) {
+        this.title = WorldFolderManager.isDownloadedWorldsActive()
+                ? Text.literal("Downloaded Worlds")
+                : Text.literal("Normal Worlds");
     }
 
     @Inject(method = "init", at = @At("TAIL"))
@@ -37,10 +43,9 @@ public abstract class SelectWorldScreenMixin extends Screen {
 
         ButtonWidget button = ButtonWidget.builder(label, btn -> {
             WorldFolderManager.toggle(this.client);
-            this.client.setScreen(new SelectWorldScreen(this.parent));
+            this.client.setScreen(new SelectWorldScreen(null));
         }).dimensions(this.width / 2 + 156, this.height - 52, 150, 20).build();
 
-        // Button deaktivieren wenn downloaded_worlds/ leer ist und man wechseln würde
         if (!active && !hasDownloaded) {
             button.active = false;
         }

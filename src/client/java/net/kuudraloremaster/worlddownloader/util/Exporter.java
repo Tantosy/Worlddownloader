@@ -66,14 +66,8 @@ public class Exporter {
             int rx = (int) (regionKey >> 32);
             int rz = (int) regionKey;
             Path regionPath = entitiesDir.resolve(String.format("r.%d.%d.mca", rx, rz));
-
-            try {
-                ChunkListener.writeMcaFile(regionPath, regionEntry.getValue());
-                System.out.println(" Successfully wrote entity region: " + regionPath.getFileName());
-            } catch (IOException e) {
-                System.out.println(" Failed to write entity region: " + e.getMessage());
-                e.printStackTrace();
-            }
+            ChunkListener.writeMcaFile(regionPath, regionEntry.getValue());
+            System.out.println(" Successfully wrote entity region: " + regionPath.getFileName());
         }
 
         System.out.println(" Entities exported to entities/ folder.");

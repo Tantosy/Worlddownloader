@@ -12,10 +12,14 @@
 		"sources": "https://github.com/FabricMC/fabric-example-mod"
 	},
 	"license": "CC0-1.0",
+	"accessWidener": "worlddownloader.accesswidener",
 	"environment": "*",
 	"entrypoints": {
 		"client": [
 			"net.kuudraloremaster.worlddownloader.WorldDownloaderClient"
+		],
+		"modmenu": [
+			"net.kuudraloremaster.worlddownloader.ModMenuIntegration"
 		]
 	},
 	"mixins": [
@@ -30,5 +34,10 @@
 		"minecraft": "~1.21.11",
 		"java": ">=21",
 		"fabric-api": "*"
+	},
+	"custom": {
+		"modmenu": {
+			"icon": "assets/worlddownloader/icon.png"
+		}
 	}
 }
